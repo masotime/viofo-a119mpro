@@ -2,6 +2,8 @@
 
 Native macOS utility for a VIOFO A119M Pro connected over the camera's Wi-Fi network.
 
+This repository contains the macOS app in `ViofoA119MPro/` and the camera API discovery notes in `viofo-a119m-pro.md`.
+
 The app uses only local camera endpoints:
 
 - HTTP/XML API on `http://192.168.1.254`
@@ -50,6 +52,8 @@ Not observed as available in the current camera mode:
 - Loads only `/DCIM/Movie` entries.
 - Downloads selected movie files.
 - Downloads all movie files.
+- Selects movie files by clicking rows or using keyboard navigation.
+- Sorts the file viewer by clicking the Name, Size, Time, or Folder column headers; clicking the active header reverses the sort order.
 - Lets the user choose the local download folder.
 - Reports SD-card free space.
 - Reads camera timezone.

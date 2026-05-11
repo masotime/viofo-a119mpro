@@ -1,14 +1,64 @@
 import SwiftUI
 import AppKit
 
+private enum FileSortColumn {
+    case name
+    case size
+    case time
+    case folder
+
+    var defaultAscending: Bool {
+        switch self {
+        case .name, .folder:
+            return true
+        case .size, .time:
+            return false
+        }
+    }
+}
+
 struct ContentView: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var liveVideo: LiveVideoModel
-    @State private var selectedFileIDs = Set<String>()
+    @State private var selectedFileID: String?
+    @State private var fileSortColumn: FileSortColumn = .time
+    @State private var fileSortAscending = FileSortColumn.time.defaultAscending
     @State private var nextRefreshDate = Date()
     @State private var secondsUntilRefresh = 10
 
     private let refreshIntervalSeconds = 10
+
+    private var sortedFiles: [ViofoFile] {
+        model.files.sorted { lhs, rhs in
+            let primaryComparison: ComparisonResult
+
+            switch fileSortColumn {
+            case .name:
+                primaryComparison = lhs.name.localizedStandardCompare(rhs.name)
+            case .size:
+                if lhs.size == rhs.size {
+                    primaryComparison = .orderedSame
+                } else {
+                    primaryComparison = lhs.size < rhs.size ? .orderedAscending : .orderedDescending
+                }
+            case .time:
+                primaryComparison = lhs.time.localizedStandardCompare(rhs.time)
+            case .folder:
+                primaryComparison = lhs.folderLabel.localizedStandardCompare(rhs.folderLabel)
+            }
+
+            if primaryComparison != .orderedSame {
+                return fileSortAscending ? primaryComparison == .orderedAscending : primaryComparison == .orderedDescending
+            }
+
+            return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+        }
+    }
+
+    private var selectedFile: ViofoFile? {
+        guard let selectedFileID else { return nil }
+        return model.files.first { $0.id == selectedFileID }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -180,15 +230,16 @@ struct ContentView: View {
             }
 
             Button {
-                let selected = model.files.filter { selectedFileIDs.contains($0.id) }
-                Task { await model.downloadFiles(selected) }
+                if let selectedFile {
+                    Task { await model.downloadFiles([selectedFile]) }
+                }
             } label: {
                 Label("Download Selected", systemImage: "square.and.arrow.down")
             }
-            .disabled(selectedFileIDs.isEmpty || model.isDownloading)
+            .disabled(selectedFile == nil || model.isDownloading)
 
             Button {
-                Task { await model.downloadFiles(model.files) }
+                Task { await model.downloadFiles(sortedFiles) }
             } label: {
                 Label("Download All", systemImage: "tray.and.arrow.down")
             }
@@ -198,19 +249,89 @@ struct ContentView: View {
     }
 
     private var filesTable: some View {
-        Table(model.files, selection: $selectedFileIDs) {
-            TableColumn("Name", value: \.name)
-            TableColumn("Size") { file in
-                Text(file.formattedSize)
-                    .monospacedDigit()
+        VStack(spacing: 0) {
+            filesHeader
+            Divider()
+
+            List(sortedFiles, selection: $selectedFileID) { file in
+                fileRow(file)
+                    .tag(file.id)
+                    .listRowInsets(EdgeInsets())
             }
-            .width(min: 90, ideal: 110)
-            TableColumn("Time", value: \.time)
-                .width(min: 150, ideal: 180)
-            TableColumn("Folder") { file in
-                Text(file.folderLabel)
+            .listStyle(.plain)
+        }
+        .background(Color(nsColor: .textBackgroundColor))
+    }
+
+    private var filesHeader: some View {
+        HStack(spacing: 12) {
+            sortableHeader("Name", column: .name)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            sortableHeader("Size", column: .size)
+                .frame(width: 120, alignment: .trailing)
+            sortableHeader("Time", column: .time)
+                .frame(width: 180, alignment: .leading)
+            sortableHeader("Folder", column: .folder)
+                .frame(width: 80, alignment: .leading)
+        }
+        .font(.caption.weight(.semibold))
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private func sortableHeader(_ title: String, column: FileSortColumn) -> some View {
+        Button {
+            setSortColumn(column)
+        } label: {
+            HStack(spacing: 4) {
+                Text(title)
+                if fileSortColumn == column {
+                    Image(systemName: fileSortAscending ? "chevron.up" : "chevron.down")
+                        .font(.caption2)
+                }
             }
-            .width(70)
+            .frame(maxWidth: .infinity, alignment: column == .size ? .trailing : .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func fileRow(_ file: ViofoFile) -> some View {
+        HStack(spacing: 12) {
+            Text(file.name)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(file.formattedSize)
+                .monospacedDigit()
+                .frame(width: 120, alignment: .trailing)
+            Text(file.time)
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(width: 180, alignment: .leading)
+            Text(file.folderLabel)
+                .lineLimit(1)
+                .frame(width: 80, alignment: .leading)
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            selectedFileID = file.id
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(file.name), \(file.formattedSize), \(file.time), \(file.folderLabel)")
+    }
+
+    private func setSortColumn(_ column: FileSortColumn) {
+        if fileSortColumn == column {
+            fileSortAscending.toggle()
+        } else {
+            fileSortColumn = column
+            fileSortAscending = column.defaultAscending
         }
     }
 
