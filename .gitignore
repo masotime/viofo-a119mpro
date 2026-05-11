@@ -1,0 +1,16 @@
+# macOS metadata
+.DS_Store
+
+# Swift / local build output
+.build/
+DerivedData/
+ViofoA119MPro/build/
+
+# Local diagnostic captures and downloaded camera media
+ViofoA119MPro/diagnostics/
+
+# Editor / local environment noise
+.vscode/
+.idea/
+*.swp
+*.swo
